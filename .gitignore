@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual env
+.venv/
+
+# Environment variables
+.env
+
+# VS Code
+.vscode/
+
+# Vector DB
+vectorstore/
+vectorstore_corpus.pkl
+
+# Temp/Test files
+temp_*.py
+temp_*.txt
+test_*.py
+
+# OS files
+.DS_Store.env
