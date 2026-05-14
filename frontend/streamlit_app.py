@@ -2,8 +2,22 @@ import streamlit as st
 import speech_recognition as sr
 import tempfile
 import os
+import sys
 import subprocess
 
+# -----------------------------
+# FIX IMPORT PATH FOR STREAMLIT CLOUD
+# -----------------------------
+ROOT_DIR = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..")
+)
+
+if ROOT_DIR not in sys.path:
+    sys.path.append(ROOT_DIR)
+
+# -----------------------------
+# IMPORTS
+# -----------------------------
 from streamlit_mic_recorder import mic_recorder
 
 from rag.retriever import retrieve_docs
