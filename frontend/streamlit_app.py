@@ -1,42 +1,41 @@
 import streamlit as st
+import requests
 import speech_recognition as sr
 import tempfile
 import os
-import sys
 import subprocess
 
-# -----------------------------
-# FIX IMPORT PATH FOR STREAMLIT CLOUD
-# -----------------------------
-ROOT_DIR = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..")
-)
-
-if ROOT_DIR not in sys.path:
-    sys.path.append(ROOT_DIR)
-
-# -----------------------------
-# IMPORTS
-# -----------------------------
 from streamlit_mic_recorder import mic_recorder
 
-from rag.retriever import retrieve_docs
-from rag.local_llm import get_local_llm
 
+FFMPEG_PATH = r"C:\ffmpeg\ffmpeg-8.1.1-full_build\bin\ffmpeg.exe"
+BACKEND_URL = "http://127.0.0.1:8000"
 
-# -----------------------------
-# CONFIG
-# -----------------------------
 st.set_page_config(page_title="Financial RAG Chatbot")
-
 st.title("Financial RAG Chatbot")
 
 
 # -----------------------------
-# FFMPEG CONFIG
+# SIDEBAR
 # -----------------------------
-# On cloud deployment use just "ffmpeg"
-FFMPEG_PATH = "ffmpeg"
+with st.sidebar:
+
+    st.header("Setup")
+
+    if st.button("📥 Ingest Documents"):
+
+        try:
+
+            response = requests.post(f"{BACKEND_URL}/ingest", timeout=120)
+            data = response.json()
+            st.success(
+                f"Ingested {data['documents_loaded']} documents "
+                f"and created {data['chunks_created']} chunks."
+            )
+
+        except Exception as e:
+
+            st.error(f"Cannot connect to backend: {e}")
 
 
 # -----------------------------
@@ -78,44 +77,33 @@ if audio:
 
     try:
 
-        # Convert webm -> wav
-        subprocess.run(
+        # Call ffmpeg directly — bypasses pydub entirely
+        result = subprocess.run(
             [FFMPEG_PATH, "-y", "-i", raw_path, wav_path],
             check=True,
             capture_output=True
         )
 
-        # Speech to text
         with sr.AudioFile(wav_path) as source:
-
             audio_data = recognizer.record(source)
-
             voice_text = recognizer.recognize_google(audio_data)
-
             st.success(f"You said: {voice_text}")
-
             question = voice_text
 
     except subprocess.CalledProcessError as e:
-
         st.error(f"ffmpeg conversion failed: {e.stderr.decode()}")
 
     except sr.UnknownValueError:
-
-        st.error("Could not understand the audio.")
+        st.error("Could not understand the audio. Please try speaking more clearly.")
 
     except sr.RequestError as e:
-
-        st.error(f"Speech API error: {e}")
+        st.error(f"Google Speech API error: {e}")
 
     except Exception as e:
-
         st.error(f"Speech recognition failed: {str(e)}")
 
     finally:
-
         for path in [raw_path, wav_path]:
-
             if os.path.exists(path):
                 os.remove(path)
 
@@ -133,72 +121,22 @@ if st.button("Submit"):
 
         try:
 
-            # -----------------------------
-            # RETRIEVE DOCUMENTS
-            # -----------------------------
-            docs = retrieve_docs(question)
+            response = requests.post(
+                f"{BACKEND_URL}/chat",
+                json={"question": question},
+                timeout=120
+            )
 
-            if not docs:
+            data = response.json()
 
-                st.error("No relevant documents found.")
+            st.subheader("Answer")
+            st.write(data["answer"])
 
-            else:
+        except requests.exceptions.Timeout:
+            st.error("API request timed out.")
 
-                # -----------------------------
-                # BUILD CONTEXT
-                # -----------------------------
-                context = "\n\n".join([
-                    f"Page {d.metadata.get('page')}:\n{d.page_content[:500]}"
-                    for d in docs
-                ])
-
-                # -----------------------------
-                # PROMPT
-                # -----------------------------
-                prompt = f"""
-You are a financial assistant.
-
-Answer ONLY using the provided context.
-
-If the answer is not available in the context,
-say:
-"I could not find this information in the documents."
-
-Context:
-{context}
-
-Question:
-{question}
-
-Give a concise factual answer.
-"""
-
-                # -----------------------------
-                # LLM
-                # -----------------------------
-                llm = get_local_llm()
-
-                answer = llm.generate_response(prompt)
-
-                # -----------------------------
-                # OUTPUT
-                # -----------------------------
-                st.subheader("Answer")
-
-                st.write(answer)
-
-                # -----------------------------
-                # SOURCES
-                # -----------------------------
-                st.subheader("Sources")
-
-                for d in docs:
-
-                    st.json({
-                        "file": d.metadata.get("source"),
-                        "page": d.metadata.get("page")
-                    })
+        except ValueError:
+            st.error("Invalid response from API. Check if backend is properly initialized.")
 
         except Exception as e:
-
-            st.error(f"Error: {str(e)}")
+            st.error(f"Backend error: {e}")

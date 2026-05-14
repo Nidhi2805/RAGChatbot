@@ -12,8 +12,7 @@ __pycache__/
 .vscode/
 
 # Vector DB
-vectorstore/
-vectorstore_corpus.pkl
+
 
 # Temp/Test files
 temp_*.py
